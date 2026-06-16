@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "types": ["@cloudflare/workers-types", "node"],
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["src/**/*.ts", "drizzle.config.ts", "test/**/*.ts"],
+  "exclude": ["node_modules"]
+}
