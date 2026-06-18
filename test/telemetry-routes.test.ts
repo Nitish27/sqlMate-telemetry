@@ -139,4 +139,59 @@ describe("telemetry routes", () => {
       })
     );
   });
+
+  it("accepts download telemetry from the landing page", async () => {
+    const createDbMock = vi.fn(() => ({ name: "db" }));
+    const hashIpAddressMock = vi.fn(async () => "hashed-ip");
+    const recordDownloadClickMock = vi.fn(async () => undefined);
+    const acceptedAt = new Date("2026-06-18T10:00:00.000Z");
+
+    const app = createApp();
+    app.route(
+      "/test/telemetry",
+      buildTelemetryRouter({
+        createDb: createDbMock as never,
+        hashIpAddress: hashIpAddressMock,
+        recordDownloadClick: recordDownloadClickMock as never,
+        now: () => acceptedAt,
+      })
+    );
+
+    const response = await app.request(
+      "http://localhost/test/telemetry/download",
+      {
+        method: "POST",
+        headers: {
+          origin: "https://sqlmate.io",
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.44",
+        },
+        body: JSON.stringify({
+          source: "landing",
+          channel: "dmg",
+          version: "0.4.1",
+        }),
+      },
+      testEnv
+    );
+
+    expect(response.status).toBe(202);
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://sqlmate.io");
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      event: "download",
+      accepted_at: acceptedAt.toISOString(),
+    });
+
+    expect(recordDownloadClickMock).toHaveBeenCalledWith(
+      { name: "db" },
+      {
+        source: "landing",
+        channel: "dmg",
+        appVersion: "0.4.1",
+        lastSeenIpHash: "hashed-ip",
+        now: acceptedAt,
+      }
+    );
+  });
 });

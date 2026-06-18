@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { bigserial, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const installations = pgTable(
   "installations",
@@ -29,5 +29,26 @@ export const installations = pgTable(
   ]
 );
 
+export const downloadClicks = pgTable(
+  "download_clicks",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    source: text("source").notNull(),
+    channel: text("channel").notNull(),
+    appVersion: text("app_version"),
+    lastSeenIpHash: text("last_seen_ip_hash"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("download_clicks_created_at_idx").on(table.createdAt),
+    index("download_clicks_channel_idx").on(table.channel),
+    index("download_clicks_source_idx").on(table.source),
+  ]
+);
+
 export type Installation = typeof installations.$inferSelect;
 export type NewInstallation = typeof installations.$inferInsert;
+export type DownloadClick = typeof downloadClicks.$inferSelect;
+export type NewDownloadClick = typeof downloadClicks.$inferInsert;

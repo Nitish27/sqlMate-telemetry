@@ -8,6 +8,13 @@
       "when": 1781636045473,
       "tag": "0000_deep_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781783096063,
+      "tag": "0001_cold_zuras",
+      "breakpoints": true
     }
   ]
 }
