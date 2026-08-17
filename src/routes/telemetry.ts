@@ -5,6 +5,7 @@ import { createDb } from "../db/client";
 import type { Bindings } from "../env";
 import { hashIpAddress } from "../lib/hash";
 import { recordDownloadClick } from "../lib/record-download-click";
+import { recordDownloadLead } from "../lib/record-download-lead";
 import { upsertInstallation } from "../lib/upsert-installation";
 
 const telemetryPayloadSchema = z.object({
@@ -20,11 +21,21 @@ const downloadPayloadSchema = z.object({
   version: z.string().trim().min(1).max(64).optional(),
 });
 
+const downloadLeadPayloadSchema = z.object({
+  name: z.string().trim().max(120).optional(),
+  email: z.string().trim().email().max(320),
+  usage_type: z.enum(["personal", "organization"]),
+  source: z.string().trim().min(1).max(32).default("landing"),
+  channel: z.string().trim().min(1).max(32).default("dmg"),
+  version: z.string().trim().min(1).max(64).optional(),
+});
+
 type TelemetryRouteDependencies = {
   createDb?: typeof createDb;
   hashIpAddress?: typeof hashIpAddress;
   upsertInstallation?: typeof upsertInstallation;
   recordDownloadClick?: typeof recordDownloadClick;
+  recordDownloadLead?: typeof recordDownloadLead;
   now?: () => Date;
 };
 
@@ -56,7 +67,7 @@ const validationErrorResponse = (message: string) =>
     { status: 400 }
   );
 
-const applyDownloadCorsHeaders = (headers: Headers, origin: string | null) => {
+const applyTelemetryCorsHeaders = (headers: Headers, origin: string | null) => {
   if (origin && DOWNLOAD_ALLOWED_ORIGINS.has(origin)) {
     headers.set("Access-Control-Allow-Origin", origin);
   } else {
@@ -113,7 +124,7 @@ const createDownloadHandler =
       const response = validationErrorResponse(
         parsed.error.issues[0]?.message ?? "Invalid download telemetry payload."
       );
-      applyDownloadCorsHeaders(response.headers, origin);
+      applyTelemetryCorsHeaders(response.headers, origin);
       return response;
     }
 
@@ -137,7 +148,50 @@ const createDownloadHandler =
       },
       202
     );
-    applyDownloadCorsHeaders(response.headers, origin);
+    applyTelemetryCorsHeaders(response.headers, origin);
+
+    return response;
+  };
+
+const createDownloadLeadHandler =
+  (dependencies: Required<TelemetryRouteDependencies>) =>
+  async (c: Context<{ Bindings: Bindings }>) => {
+    const origin = c.req.header("origin") ?? null;
+    const body = await c.req.json().catch(() => null);
+    const parsed = downloadLeadPayloadSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const response = validationErrorResponse(
+        parsed.error.issues[0]?.message ?? "Invalid download lead payload."
+      );
+      applyTelemetryCorsHeaders(response.headers, origin);
+      return response;
+    }
+
+    const requestTime = dependencies.now();
+    const db = dependencies.createDb(c.env);
+    const lastSeenIpHash = await dependencies.hashIpAddress(getClientIp(c.req.raw));
+
+    await dependencies.recordDownloadLead(db, {
+      name: parsed.data.name ?? null,
+      email: parsed.data.email,
+      usageType: parsed.data.usage_type,
+      source: parsed.data.source,
+      channel: parsed.data.channel,
+      appVersion: parsed.data.version ?? null,
+      lastSeenIpHash,
+      now: requestTime,
+    });
+
+    const response = c.json(
+      {
+        ok: true,
+        event: "download_lead",
+        accepted_at: requestTime.toISOString(),
+      },
+      202
+    );
+    applyTelemetryCorsHeaders(response.headers, origin);
 
     return response;
   };
@@ -148,6 +202,7 @@ export const buildTelemetryRouter = (overrides: TelemetryRouteDependencies = {})
     hashIpAddress: overrides.hashIpAddress ?? hashIpAddress,
     upsertInstallation: overrides.upsertInstallation ?? upsertInstallation,
     recordDownloadClick: overrides.recordDownloadClick ?? recordDownloadClick,
+    recordDownloadLead: overrides.recordDownloadLead ?? recordDownloadLead,
     now: overrides.now ?? (() => new Date()),
   };
 
@@ -157,10 +212,16 @@ export const buildTelemetryRouter = (overrides: TelemetryRouteDependencies = {})
   router.post("/heartbeat", createTelemetryHandler(true, dependencies));
   router.options("/download", (c) => {
     const response = new Response(null, { status: 204 });
-    applyDownloadCorsHeaders(response.headers, c.req.header("origin") ?? null);
+    applyTelemetryCorsHeaders(response.headers, c.req.header("origin") ?? null);
     return response;
   });
   router.post("/download", createDownloadHandler(dependencies));
+  router.options("/download-lead", (c) => {
+    const response = new Response(null, { status: 204 });
+    applyTelemetryCorsHeaders(response.headers, c.req.header("origin") ?? null);
+    return response;
+  });
+  router.post("/download-lead", createDownloadLeadHandler(dependencies));
 
   return router;
 };

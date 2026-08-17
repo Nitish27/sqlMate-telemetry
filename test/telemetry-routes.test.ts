@@ -194,4 +194,90 @@ describe("telemetry routes", () => {
       }
     );
   });
+
+  it("rejects invalid download lead payloads", async () => {
+    const app = createApp();
+    const response = await app.request(
+      "http://localhost/v1/telemetry/download-lead",
+      {
+        method: "POST",
+        headers: {
+          origin: "https://sqlmate.io",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Nitish",
+          usage_type: "personal",
+        }),
+      },
+      testEnv
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://sqlmate.io");
+    await expect(response.json()).resolves.toMatchObject({
+      error: "invalid_payload",
+    });
+  });
+
+  it("accepts a download lead and stores it with the client IP hash", async () => {
+    const createDbMock = vi.fn(() => ({ name: "db" }));
+    const hashIpAddressMock = vi.fn(async () => "hashed-ip");
+    const recordDownloadLeadMock = vi.fn(async () => undefined);
+    const acceptedAt = new Date("2026-06-18T11:00:00.000Z");
+
+    const app = createApp();
+    app.route(
+      "/test/telemetry",
+      buildTelemetryRouter({
+        createDb: createDbMock as never,
+        hashIpAddress: hashIpAddressMock,
+        recordDownloadLead: recordDownloadLeadMock as never,
+        now: () => acceptedAt,
+      })
+    );
+
+    const response = await app.request(
+      "http://localhost/test/telemetry/download-lead",
+      {
+        method: "POST",
+        headers: {
+          origin: "https://sqlmate.io",
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.77",
+        },
+        body: JSON.stringify({
+          name: "Nitish",
+          email: "nitish@example.com",
+          usage_type: "organization",
+          source: "landing",
+          channel: "dmg",
+          version: "0.4.1",
+        }),
+      },
+      testEnv
+    );
+
+    expect(response.status).toBe(202);
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://sqlmate.io");
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      event: "download_lead",
+      accepted_at: acceptedAt.toISOString(),
+    });
+
+    expect(recordDownloadLeadMock).toHaveBeenCalledWith(
+      { name: "db" },
+      {
+        name: "Nitish",
+        email: "nitish@example.com",
+        usageType: "organization",
+        source: "landing",
+        channel: "dmg",
+        appVersion: "0.4.1",
+        lastSeenIpHash: "hashed-ip",
+        now: acceptedAt,
+      }
+    );
+  });
 });
