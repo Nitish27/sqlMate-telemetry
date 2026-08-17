@@ -15,6 +15,13 @@
       "when": 1781783096063,
       "tag": "0001_cold_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786991784278,
+      "tag": "0002_even_praxagora",
+      "breakpoints": true
     }
   ]
 }

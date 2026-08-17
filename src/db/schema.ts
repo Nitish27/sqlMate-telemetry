@@ -48,7 +48,31 @@ export const downloadClicks = pgTable(
   ]
 );
 
+export const downloadLeads = pgTable(
+  "download_leads",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    name: text("name"),
+    email: text("email").notNull(),
+    usageType: text("usage_type").notNull(),
+    source: text("source").notNull(),
+    channel: text("channel").notNull(),
+    appVersion: text("app_version"),
+    lastSeenIpHash: text("last_seen_ip_hash"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("download_leads_created_at_idx").on(table.createdAt),
+    index("download_leads_email_idx").on(table.email),
+    index("download_leads_usage_type_idx").on(table.usageType),
+  ]
+);
+
 export type Installation = typeof installations.$inferSelect;
 export type NewInstallation = typeof installations.$inferInsert;
 export type DownloadClick = typeof downloadClicks.$inferSelect;
 export type NewDownloadClick = typeof downloadClicks.$inferInsert;
+export type DownloadLead = typeof downloadLeads.$inferSelect;
+export type NewDownloadLead = typeof downloadLeads.$inferInsert;
